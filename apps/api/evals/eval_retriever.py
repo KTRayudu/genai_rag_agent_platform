@@ -73,7 +73,7 @@ async def ragas_context_recall_id_based(run, example):
 
 
 results = ls_client.evaluate(
-    lambda x: rag_pipeline(x["question"], qdrant_client),
+    lambda x: rag_pipeline(x["question"]),
     data="rag-evaluation-dataset",
     evaluators=[
         ragas_faithfulness,

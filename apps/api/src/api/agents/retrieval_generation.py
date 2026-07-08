@@ -7,7 +7,7 @@ from google import genai
 from google.genai import types
 from dotenv import load_dotenv
 import os
-
+from langsmith import traceable, get_current_run_tree
 
 
 
@@ -21,6 +21,8 @@ if not GOOGLE_API_KEY:
 # Initialize client
 gemini_client = genai.Client(api_key=GOOGLE_API_KEY)
 
+
+@traceable
 # 3. Define the embedding function with custom dimensionality
 def get_embedding(text, model="gemini-embedding-001",):
     """
@@ -42,7 +44,7 @@ def get_embedding(text, model="gemini-embedding-001",):
 
 
 
-
+@traceable
 def retrieve_data(query, qdrant_client, k=5):
 
     query_embedding = get_embedding(query)
@@ -74,6 +76,7 @@ def retrieve_data(query, qdrant_client, k=5):
 
 
 
+@traceable
 def process_context(context):
 
     formatted_context = ""
@@ -84,7 +87,7 @@ def process_context(context):
     return formatted_context
 
 
-
+@traceable
 def build_prompt(preprocessed_context, question):
 
     prompt = f"""
@@ -120,6 +123,7 @@ Question:
 # "gemini-1.5-pro"          : Deep context understanding and complex multi-step reasoning.
 # -----------------------------------------------------------
 
+@traceable
 def generate_answer(prompt, model_name="gemini-2.5-flash"):
     """
     Generates a response using the specified Gemini model.
@@ -183,7 +187,7 @@ def generate_answer(prompt, model_name="gemini-2.5-flash"):
 # def rag_pipeline(question, top_k=5):
 
 #     qdrant_client = QdrantClient(url="http://qdrant:6333")
-
+@traceable
 def rag_pipeline(question, top_k=5):
     # Added: check_compatibility=False to fix version conflict
     qdrant_client = QdrantClient(url="http://qdrant:6333", check_compatibility=False)

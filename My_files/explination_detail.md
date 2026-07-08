@@ -501,13 +501,11 @@ Defines the HTTP routes (the URL endpoints like `/rag/`) that clients can call.
 ```python
 from fastapi import Request, APIRouter
 from api.api.models import RAGRequest, RAGResponse
-from qdrant_client import QdrantClient
 from api.agents.retrieval_generation import rag_pipeline
 import logging
 
 # ... logging setup ...
 
-qdrant_client = QdrantClient(url="http://qdrant:6333")
 rag_router = APIRouter()
 
 @rag_router.post("/")
@@ -516,7 +514,7 @@ def rag(
     payload: RAGRequest
 ) -> RAGResponse:
 
-    answer = rag_pipeline(payload.query, qdrant_client)
+    answer = rag_pipeline(payload.query)
 
     return RAGResponse(
         request_id=request.state.request_id,
@@ -528,11 +526,10 @@ api_router.include_router(rag_router, prefix="/rag", tags=["rag"])
 ```
 
 #### Line-by-Line Explanation:
-- **`qdrant_client = QdrantClient(url="http://qdrant:6333")`** — Initializes the connection to the Qdrant vector database. Because it uses the Docker network, it connects to `http://qdrant` (the service name).
 - **`rag_router = APIRouter()`** — Creates a mini-FastAPI router to group related RAG endpoints.
 - **`@rag_router.post("/")`** — A Python decorator mapping HTTP POST requests to the `rag()` function.
 - **`def rag(request: Request, payload: RAGRequest) -> RAGResponse:`** — The function signature. FastAPI automatically reads the incoming JSON, validates it against `RAGRequest`, and binds it to `payload`.
-- **`answer = rag_pipeline(payload.query, qdrant_client)`** — Calls the actual AI logic (defined in another file), passing the user's question and the database connection.
+- **`answer = rag_pipeline(payload.query)`** — Calls the actual AI logic (defined in another file), passing the user's question.
 - **`return RAGResponse(...)`** — Constructs the Pydantic response object. Notice it pulls the `request_id` out of `request.state.request_id` (put there by our middleware). FastAPI auto-converts this to JSON.
 - **`api_router.include_router(rag_router, prefix="/rag")`** — Mounts the `rag_router` so that its `/` endpoint becomes accessible at `/rag/`.
 
@@ -693,7 +690,7 @@ async def ragas_faithfulness(run, example):
 
 ```python
 results = ls_client.evaluate(
-    lambda x: rag_pipeline(x["question"], qdrant_client),
+    lambda x: rag_pipeline(x["question"]),
     data="rag-evaluation-dataset",
     evaluators=[
         ragas_faithfulness,
@@ -857,6 +854,91 @@ if prompt := st.chat_input("Hello! How can I assist you today?"):
 - **`answer = response_data["answer"]`** — Extracts the LLM's answer from the parsed JSON response.
 - **`st.write(answer)`** — Prints the LLM's response into the AI chat bubble on the screen.
 - **`st.session_state...append({"role": "assistant", "content": answer})`** — Finally, saves the AI's response to the persistent history so it stays on screen during the next script rerun.
+## Part 5: Notebooks
+
+---
+
+## Part 5.0: LLM API Prerequisites (`notebooks/prerequisites/01-llm-apis.ipynb`)
+
+### Overview
+Before building a complex RAG system, we must ensure our foundational tools—the LLM APIs—are configured and responding correctly. This short prerequisite notebook acts as a "Hello World" to verify connectivity with three major AI providers: OpenAI, Google (Gemini), and Groq. 
+
+### Step 1: Loading the Environment
+```python
+from dotenv import load_dotenv
+import os
+
+load_dotenv("../../.env")
+```
+*   **The "Why"**: APIs require authentication via secret keys. Instead of hardcoding them (a major security risk), we load them securely from the `.env` file located in the root of our workspace.
+
+### Step 2: Testing the Clients
+The notebook proceeds to test each client individually by asking them to "print random words".
+
+1.  **OpenAI Client**: Tests connectivity using the standard `openai` SDK. 
+2.  **Google GenAI Client**: Uses the `google-genai` SDK and our `GOOGLE_API_KEY` to prompt the `gemini-2.5-flash` model. This is the model we will use for our final RAG generation.
+3.  **Groq Client**: Tests Groq's high-speed inference engine using the `llama-3.3-70b-versatile` open-source model.
+
+If all three cells execute and return random words without `Unauthorized` or `Connection` errors, our environment is fully ready for the bootcamp.
+
+---
+
+## Part 5.1: Exploring the Amazon Dataset (`notebooks/week_1/01-explore-amazon-dataset.ipynb`)
+
+### Overview
+Data wrangling is the unglamorous but essential first step of any ML project. In this notebook, we take the massive raw Amazon Electronics dataset (millions of rows) and filter it down into a clean, highly relevant subset of 100 items that we can comfortably embed and search locally on our laptops.
+
+### Step 1: Parsing Raw JSONL Data
+The raw data comes in `.jsonl` (JSON Lines) format, where every single line is a complete JSON object representing one product.
+
+```python
+import json
+import pandas as pd
+
+with open('../../data/meta_Electronics.jsonl', 'r') as f:
+    first_line = json.loads(f.readline())
+```
+*   **The "Why"**: We inspect the first line to understand the schema. We discover fields like `title`, `average_rating`, `description`, `images`, and `details`.
+
+### Step 2: Temporal Filtering (2022 and Newer)
+RAG systems are often used to answer questions about *recent* data. We write a filter to only keep products that became available in 2022 or later.
+
+```python
+def filter_data(data: dict) -> dict:
+    filter = False
+    if int(data['details']['Date First Available'][-4:]) < 2022:
+        filter = True
+    return filter
+```
+*   **The "Why"**: We open the massive raw file, stream it line-by-line (to prevent running out of RAM), apply this filter, and write the valid lines to a new file: `meta_Electronics_2022_2023.jsonl`.
+
+### Step 3: Categorical Filtering
+We apply a second pass to remove any products that lack a `main_category` tag.
+
+```python
+def filter_category(data: dict) -> dict:
+    filter = False
+    if data['main_category'] == None:
+        filter = True
+    return filter
+```
+
+### Step 4: Data Visualization & Subsetting
+We load our cleaned, recent, categorized data into a Pandas DataFrame to visualize it.
+
+```python
+df = pd.read_json("../../data/meta_Electronics_2022_2023_with_category.jsonl", lines=True)
+
+# Count products per category
+category_counts = df['main_category'].value_counts()
+category_counts.plot(kind='bar', figsize=(10, 6))
+```
+*   **The "Why"**: Visualizing the distribution ensures we don't have massive imbalances (e.g., 99% phone cases and 1% laptops).
+*   **The Final Output**: Finally, we extract exactly 100 diverse rows and save them to `Amazon-items-subset-100.jsonl`. This small, perfectly formatted file is what our RAG pipeline will ingest in the next notebook.
+
+---
+
+
 ## Part 5.2: RAG Data Preprocessing & Vector Database Setup (`notebooks/week_1/02-RAG-preprocessing-Amazon.ipynb`)
 
 ### Overview
@@ -1291,3 +1373,45 @@ async def ragas_context_precision_id_based(run, example):
 > **Continuous Improvement**: By automating these evaluations, we can confidently experiment with different chunk sizes, embedding models, or prompts. If a change improves our RAGAS scores across the dataset, we know it's safe to deploy to production.
 
 ---
+
+## PART 6 — Interview Preparation: Key Questions & Answers
+
+### 1. Architecture & Infrastructure
+
+**Q: Why did you choose FastAPI over Flask or Django for the backend?**
+**A:** FastAPI was chosen for its high performance (built on Starlette and Pydantic) and native async/await support, which is critical for I/O-bound operations like calling the Gemini API and querying the Qdrant Vector DB. Additionally, its automatic generation of OpenAPI (Swagger) documentation makes testing endpoints straightforward.
+
+**Q: How does the communication work between your Streamlit frontend, FastAPI backend, and Qdrant database in your Docker setup?**
+**A:** We use a `docker-compose.yml` file to orchestrate three separate containers. By placing them on a shared custom bridge network (`rag-network`), they can communicate using their service names as hostnames (e.g., FastAPI connects to Qdrant via `http://qdrant:6333` and Streamlit connects to FastAPI via `http://api:8000`). This ensures secure internal communication without exposing all ports to the host machine.
+
+### 2. Retrieval-Augmented Generation (RAG) vs. Fine-Tuning
+
+**Q: Why use RAG instead of just fine-tuning the Gemini model on your Amazon product dataset?**
+**A:** RAG provides three massive advantages over fine-tuning for this use case:
+1. **Real-time Updates:** If a product's price or rating changes, or a new product is added, we just update the Qdrant database. Fine-tuning would require retraining the model entirely.
+2. **Hallucination Prevention (Groundedness):** RAG forces the model to answer *only* based on the provided context chunks. Fine-tuned models still rely on their internal weights and can easily hallucinate fake features or prices.
+3. **Cost & Speed:** Embedding text into Qdrant is drastically cheaper and faster than fine-tuning a massive LLM.
+
+### 3. Embeddings & Vector Databases (Qdrant)
+
+**Q: What is an embedding, and why are we using `gemini-embedding-001` with 3072 dimensions?**
+**A:** An embedding is a numerical representation of text (a vector array) that captures semantic meaning. We use `gemini-embedding-001` to map our product descriptions into a 3072-dimensional space. Words or products with similar features (e.g., "wireless earbuds" and "Bluetooth headphones") will have vectors that point in roughly the same direction, allowing us to find related products even if the exact keywords don't match.
+
+**Q: What metric do you use to calculate the similarity between the user's question and the product embeddings?**
+**A:** We use **Cosine Similarity**. Cosine similarity measures the angle between two vectors rather than their magnitude (length). This is crucial for text search because a long product description and a short user query might have very different magnitudes, but if they point in the same semantic direction, the angle between them will be small, indicating high relevance.
+
+### 4. Advanced Prompt Engineering
+
+**Q: How do you prevent the LLM from answering questions outside the scope of your inventory?**
+**A:** We enforce strict constraints in the System Prompt. We explicitly instruct the model: *"You need to answer the question based on the provided context only"* and *"If the answer cannot be found... politely state that you do not have that information."* By injecting the retrieved Qdrant results directly into the prompt as the sole source of truth, we tightly bound the model's reasoning capabilities.
+
+### 5. Evaluation & RAGAS
+
+**Q: How do you mathematically prove your RAG pipeline is working? What is RAGAS?**
+**A:** We use the **RAGAS (Retrieval Augmented Generation Assessment)** framework. Because manual testing is unscalable, we first generate a synthetic evaluation dataset (questions paired with known ground-truth context IDs). RAGAS uses a "Judge LLM" to score our pipeline on two main fronts:
+- **Generation Metrics:** 
+  - **Faithfulness:** Does the generated answer contain hallucinations, or is it strictly derived from the retrieved context?
+  - **Response Relevancy:** Did the answer actually address the user's question without useless verbosity?
+- **Retrieval Metrics:**
+  - **Context Precision:** Did Qdrant retrieve the most relevant chunks, and were they ranked at the top?
+  - **Context Recall:** Did Qdrant successfully retrieve *all* the chunks necessary to fully answer the question?
