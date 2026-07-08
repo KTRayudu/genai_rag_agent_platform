@@ -22,7 +22,8 @@ if not GOOGLE_API_KEY:
 gemini_client = genai.Client(api_key=GOOGLE_API_KEY)
 
 
-@traceable
+@traceable(name="embed_query", run_type="embedding", metadata={"ls_provider": "google", "ls_model_name": "gemini-embedding-001"})
+# , run_type="embedding", metadata={"ls_provider": "google", "ls_model_name": "gemini-embedding-001"})
 # 3. Define the embedding function with custom dimensionality
 def get_embedding(text, model="gemini-embedding-001",):
     """
@@ -37,6 +38,13 @@ def get_embedding(text, model="gemini-embedding-001",):
         #     # output_dimensionality=1536  
         )
     )
+    current_run = get_current_run_tree()
+
+    if current_run:
+        current_run.metadata["usage_metadata"] = {
+            "input_tokens": response.usage.prompt_tokens,
+            "total_tokens": response.usage.total_tokens,
+        }
     
     return response.embeddings[0].values
 
@@ -44,7 +52,8 @@ def get_embedding(text, model="gemini-embedding-001",):
 
 
 
-@traceable
+@traceable(name="retrieve_data",
+    run_type="retriever")
 def retrieve_data(query, qdrant_client, k=5):
 
     query_embedding = get_embedding(query)
@@ -76,7 +85,8 @@ def retrieve_data(query, qdrant_client, k=5):
 
 
 
-@traceable
+@traceable(name="format_retrieved_context" ,
+    run_type="prompt")
 def process_context(context):
 
     formatted_context = ""
@@ -87,7 +97,7 @@ def process_context(context):
     return formatted_context
 
 
-@traceable
+@traceable(name="build_prompt",run_type="prompt")
 def build_prompt(preprocessed_context, question):
 
     prompt = f"""
@@ -123,7 +133,7 @@ Question:
 # "gemini-1.5-pro"          : Deep context understanding and complex multi-step reasoning.
 # -----------------------------------------------------------
 
-@traceable
+@traceable(name="generate_answer",run_type="llm",metadata={"ls_provider": "google", "ls_model_name": "gemini-2.5-flash"})
 def generate_answer(prompt, model_name="gemini-2.5-flash"):
     """
     Generates a response using the specified Gemini model.
@@ -138,56 +148,10 @@ def generate_answer(prompt, model_name="gemini-2.5-flash"):
 
 
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 # def rag_pipeline(question, top_k=5):
 
 #     qdrant_client = QdrantClient(url="http://qdrant:6333")
-@traceable
+@traceable ( name="rag_pipeline")
 def rag_pipeline(question, top_k=5):
     # Added: check_compatibility=False to fix version conflict
     qdrant_client = QdrantClient(url="http://qdrant:6333", check_compatibility=False)
@@ -197,7 +161,16 @@ def rag_pipeline(question, top_k=5):
     prompt = build_prompt(preprocessed_context, question)
     answer = generate_answer(prompt)
 
-    return answer
+    # return answer
+    final_result = {
+        "answer": answer,
+        "question": question,
+        "retrieved_context_ids": retrieved_context["retrieved_context_ids"],
+        "retrieved_context": retrieved_context["retrieved_context"],
+        "similarity_scores": retrieved_context["similarity_scores"]
+    }
+
+    return final_result
 
 
 
