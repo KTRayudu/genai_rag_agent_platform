@@ -208,12 +208,13 @@ __marimo__/
 
 
 data/
+data_1/
 
 qdrant_storage/
 
 # Weird file thats hard to delete
 nul
 
-# README files
-README*.md
-**/README*.md
+# # README files
+# README*.md
+# **/README*.md
