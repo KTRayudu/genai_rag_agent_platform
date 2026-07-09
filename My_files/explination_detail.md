@@ -575,19 +575,30 @@ def get_embedding(text, model="gemini-embedding-001"):
 ```python
 def retrieve_data(query, qdrant_client, k=5):
     query_embedding = get_embedding(query)
+
     results = qdrant_client.query_points(
         collection_name="Amazon-items-collection-03",
         query=query_embedding,
         limit=k,
     )
-    # ... lists initialized ...
+
+    retrieved_context_ids = []
+    retrieved_context = []
+    similarity_scores = []
+    retrieved_context_ratings = []
+
     for result in results.points:
         retrieved_context_ids.append(result.payload["parent_asin"])
         retrieved_context.append(result.payload["description"])
         retrieved_context_ratings.append(result.payload["average_rating"])
         similarity_scores.append(result.score)
 
-    return { "retrieved_context_ids": retrieved_context_ids, ... }
+    return {
+        "retrieved_context_ids": retrieved_context_ids,
+        "retrieved_context": retrieved_context,
+        "retrieved_context_ratings": retrieved_context_ratings,
+        "similarity_scores": similarity_scores,
+    }
 ```
 
 #### Retrieval Explanation:
@@ -657,12 +668,26 @@ This script uses the **Ragas** framework to evaluate the performance of the RAG 
 
 ```python
 from api.agents.retrieval_generation import rag_pipeline
-# ... imports (qdrant, langsmith, langchain, ragas) ...
 import os
 
+from qdrant_client import QdrantClient
+from langsmith import Client
+
+from langchain_openai import ChatOpenAI
+from langchain_openai import OpenAIEmbeddings
+
+from ragas.llms import LangchainLLMWrapper
+from ragas.embeddings import LangchainEmbeddingsWrapper
+
+from ragas.dataset_schema import SingleTurnSample 
+from ragas.metrics import IDBasedContextPrecision, IDBasedContextRecall, Faithfulness, ResponseRelevancy
+
 os.environ["LANGCHAIN_CONCURRENCY_LIMIT"] = "10"
+
 ls_client = Client()
-qdrant_client = QdrantClient(url=f"http://localhost:6333")
+qdrant_client = QdrantClient(
+    url=f"http://localhost:6333"
+)
 
 ragas_llm = LangchainLLMWrapper(ChatOpenAI(model="gpt-4.1-mini"))
 ragas_embeddings = LangchainEmbeddingsWrapper(OpenAIEmbeddings(model="text-embedding-3-small"))
@@ -794,16 +819,17 @@ def api_call(method, url, **kwargs):
 
         if response.ok:
             return True, response_data
+
         return False, response_data
 
     except requests.exceptions.ConnectionError:
         _show_error_popup("Connection error. Please check your network connection.")
         return False, {"message": "Connection error"}
     except requests.exceptions.Timeout:
-        # ... timeout logic ...
+        _show_error_popup("The request timed out. Please try again later.")
         return False, {"message": "Request timeout"}
     except Exception as e:
-        # ... generic exception logic ...
+        _show_error_popup(f"An unexpected error occurred: {str(e)}")
         return False, {"message": str(e)}
 ```
 
@@ -837,11 +863,14 @@ if prompt := st.chat_input("Hello! How can I assist you today?"):
         st.markdown(prompt)
 
     with st.chat_message("assistant"):
-        output = api_call("post", f"{config.API_URL}/rag", json={"query": prompt})
-        response_data = output[1]
-        answer = response_data["answer"]
-        st.write(answer)
+        is_success, response_data = api_call("post", f"{config.API_URL}/rag", json={"query": prompt})
         
+        if is_success:
+            answer = response_data.get("answer", "No answer provided.")
+        else:
+            answer = f"⚠️ API Error: {response_data.get('detail', response_data.get('message', 'Unknown error'))}"
+            
+        st.write(answer)
     st.session_state.messages.append({"role": "assistant", "content": answer})
 ```
 
@@ -1242,7 +1271,13 @@ We send the prompt and our `all_context` to Gemini, and parse the resulting JSON
 
 ```python
 # Send request to Gemini
-# ... (API call omitted for brevity) ...
+response = gemini_client.models.generate_content(
+    model="gemini-2.5-flash",
+    contents=[SYSTEM_PROMPT, all_context],
+    config=types.GenerateContentConfig(
+        response_mime_type="application/json",
+    )
+)
 
 # Parse the text response into a list of Python dictionaries
 json_output = json.loads(response.text)
@@ -1307,16 +1342,20 @@ We define a slightly modified `rag_pipeline` function. Instead of just returning
 
 ```python
 def rag_pipeline(question, top_k=5):
-    # ... (Retrieval and Generation logic) ...
+    qdrant_client = QdrantClient(url="http://localhost:6333", check_compatibility=False)
     
-    final_result = {
+    retrieved_context = retrieve_data(question, qdrant_client, top_k)
+    preprocessed_context = process_context(retrieved_context)
+    prompt = build_prompt(preprocessed_context, question)
+    answer = generate_answer(prompt)
+    
+    return {
         "answer": answer,
         "question": question,
         "retrieved_context_ids": retrieved_context["retrieved_context_ids"],
         "retrieved_context": retrieved_context["retrieved_context"],
         "similarity_scores": retrieved_context["similarity_scores"]
     }
-    return final_result
 
 # Run the pipeline on the test question
 result = rag_pipeline(reference_input["question"])

@@ -39,12 +39,14 @@ def get_embedding(text, model="gemini-embedding-001",):
         )
     )
     current_run = get_current_run_tree()
-
-    if current_run:
-        current_run.metadata["usage_metadata"] = {
-            "input_tokens": response.usage.prompt_tokens,
-            "total_tokens": response.usage.total_tokens,
-        }
+    # if current_run:
+    #     current_run.metadata["usage_metadata"] = {
+    #         "input_tokens": response.usage.prompt_tokens,
+    #         "total_tokens": response.usage.total_tokens,
+    #     }
+    # Note: EmbedContentResponse does not contain a 'usage' attribute in the 
+    # current version of the google-genai SDK, so we skip setting token usage for embeddings.
+    # Time and duration are still tracked by LangSmith automatically.
     
     return response.embeddings[0].values
 
