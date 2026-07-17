@@ -7,6 +7,163 @@
 
 ---
 
+## End-to-End Execution Guide & Workflow
+
+Welcome to the GenAI RAG Agent Platform. This workflow will guide you step-by-step from zero to a fully running local application, including vector database ingestion, pipeline evaluation, and frontend deployment.
+
+### Step 1: Prerequisites
+Before starting, ensure you have the following installed on your machine:
+- **Docker** and **Docker Compose**: Required to spin up the Qdrant database, FastAPI backend, and Streamlit frontend in isolated containers.
+- **uv**: A fast Rust-based Python package manager. It is required for local dependency management and running evaluations.
+- **Make**: For running the convenient alias commands in the `Makefile`.
+
+### Step 2: Environment Configuration (`.env`)
+1. In the root of the project, locate the `env.example` file.
+2. Create a copy of it and name it `.env`:
+   ```bash
+   cp env.example .env
+   ```
+3. Open the `.env` file and fill in your actual API keys. At a minimum, you'll need:
+   - `GOOGLE_API_KEY`: Used by Gemini for embedding generation and text generation.
+   - `LANGSMITH_API_KEY`: (Optional but recommended) Used for tracing your pipeline runs and evaluating the RAG architecture.
+
+### Step 3: Local Environment Setup (`uv sync`)
+To run the Jupyter notebooks locally or execute evaluations from your terminal, you must sync your local Python dependencies into a virtual environment:
+
+1. **Sync dependencies**: Run this command in the project root. It creates a `.venv` folder with all required packages.
+   ```bash
+   uv sync
+   ```
+2. **Activate the Virtual Environment**: Ensure your terminal uses the local dependencies.
+   - On **Linux/macOS**: `source .venv/bin/activate`
+   - On **Windows**: `.venv\Scripts\activate.bat`
+   *(Your terminal prompt should now show `(.venv)`).*
+
+3. **Launch Jupyter (Browser Method)**: Start the Jupyter Notebook server:
+   ```bash
+   uv run jupyter notebook
+   ```
+4. **Selecting the Kernel**:
+   - **In VSCode (Recommended)**: Open a `.ipynb` file, click "Select Kernel" in the top right, choose "Python Environments", and select the `.venv` path.
+   - **In Jupyter Web UI**: Ensure the active kernel is set to your `.venv` environment.
+
+### Step 4: Data Ingestion & Pipeline Exploration (Notebooks)
+To understand how the RAG pipeline is built and to ingest data into Qdrant, follow the Jupyter Notebooks located in the `notebooks/week_1/` directory. Run them sequentially:
+1. `01-explore-amazon-dataset.ipynb`: Data exploration of the raw Amazon dataset.
+2. `02-RAG-preprocessing-Amazon.ipynb`: Chunking data, generating Gemini embeddings, and pushing them to Qdrant.
+3. `03-RAG-pipeline.ipynb`: Structuring the core Python RAG pipeline logic (Retrieval + Generation).
+4. `04-evaluation-dataset.ipynb`: Using LLMs to synthetically generate a QA dataset for testing.
+5. `05-RAG-Evals.ipynb`: Scoring the pipeline against the evaluation dataset using RAGAS.
+
+### Step 5: Launching the Production Services (Docker)
+Once data is ingested into your Qdrant instance via the notebooks, you can spin up the full production application stack (Backend + Frontend + VectorDB).
+
+**To build and start all services, run this command in your terminal:**
+```bash
+make run-docker-compose
+```
+*(Alternatively, you can run `docker compose up --build` directly).*
+
+When you run this command:
+1. Docker builds the FastAPI backend (`api`) and Streamlit UI (`chatbot_ui`) images.
+2. It pulls the official Qdrant image.
+3. It mounts local volumes (so code changes reflect instantly without rebuilding).
+4. It starts all containers. Wait until the logs show the services are listening.
+
+**Access the Applications:**
+- **Ecommerce Assistant UI (Streamlit)**: Open your browser to `http://localhost:8501`. Talk to the chatbot here!
+- **Backend API Docs (FastAPI)**: Available at `http://localhost:8000/docs` to test endpoints manually.
+- **Qdrant Vector DB Dashboard**: Available at `http://localhost:6333/dashboard`.
+
+### Step 6: Running Automated Evaluations
+To formally assess the retriever's performance directly from the command line, run:
+```bash
+make run-evals-retriever
+```
+This command uses `uv` to sync dependencies and runs the evaluation script (`evals/eval_retriever.py`) against your configuration, logging the results to LangSmith.
+
+---
+
+## GitHub Collaboration & CI/CD Workflow
+
+To effectively collaborate on this RAG platform and maintain production code quality, we follow a strict Git and GitHub Actions workflow.
+
+### 1. Branching Strategy
+Never push directly to the `main` branch. Always create a feature branch for your work:
+```bash
+git checkout -b feature/add-hybrid-search
+```
+- Use descriptive branch names (`feature/`, `bugfix/`, `hotfix/`).
+- Commit often with clear messages explaining the *why*, not just the *what*.
+
+### 2. Preparing for a Pull Request (PR)
+Before pushing your branch, ensure your code is clean and tested locally:
+1. **Clean Notebooks**: Never commit notebooks with giant output cells or raw API keys embedded in them. Run `make clean-notebook-outputs` to strip the outputs.
+2. **Local Evals**: Run `make run-evals-retriever` locally to ensure your changes didn't degrade the RAG performance.
+
+### 3. Creating the Pull Request
+1. Push your branch to GitHub: `git push origin feature/add-hybrid-search`.
+2. Open a PR against the `main` branch.
+3. In the PR description, explicitly state:
+   - What the change is.
+   - Which LangSmith evaluation traces correspond to this branch (provide a link to the LangSmith dashboard if possible).
+
+### 4. GitHub Actions (Automated CI/CD)
+Ideally, the repository should contain a `.github/workflows/main.yml` file that automates the testing process. A standard GitHub Action for this RAG platform does the following on every PR:
+1. **Setup**: Spins up an Ubuntu runner and installs the `uv` package manager.
+2. **Install**: Runs `uv sync` to install dependencies.
+3. **Format/Lint**: Runs a linter (like Ruff) to ensure PEP8 compliance.
+4. **Evaluate**: Runs the `eval_retriever.py` script automatically using securely stored GitHub Secrets (e.g., `GOOGLE_API_KEY` and `LANGSMITH_API_KEY`) to ensure the RAG evaluation scores meet the minimum threshold before the code is allowed to be merged.
+
+#### Example: `.github/workflows/main.yml`
+Here is the complete workflow code you can use for reference. You can place this code in `.github/workflows/main.yml` in your repository:
+
+```yaml
+name: RAG Pipeline CI
+
+on:
+  push:
+    branches: [ "main" ]
+  pull_request:
+    branches: [ "main" ]
+
+jobs:
+  test-and-evaluate:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Check out repository
+      uses: actions/checkout@v4
+
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: "3.12"
+
+    - name: Install uv package manager
+      uses: astral-sh/setup-uv@v2
+      with:
+        version: "latest"
+
+    - name: Install dependencies
+      run: uv sync
+
+    - name: Run RAGAS Evaluations
+      env:
+        GOOGLE_API_KEY: ${{ secrets.GOOGLE_API_KEY }}
+        LANGSMITH_API_KEY: ${{ secrets.LANGSMITH_API_KEY }}
+        LANGCHAIN_TRACING_V2: "true"
+        LANGCHAIN_PROJECT: "pr-evaluations"
+      run: |
+        # Set PYTHONPATH to include the api directories
+        export PYTHONPATH=$PWD/apps/api:$PWD/apps/api/src:$PYTHONPATH
+        # Run the evaluation script via uv
+        uv run python -m evals.eval_retriever
+```
+
+---
+
+
 ## PART 1 — Project Setup & Infrastructure
 
 ---
