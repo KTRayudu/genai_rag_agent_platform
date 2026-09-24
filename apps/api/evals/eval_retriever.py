@@ -2,6 +2,7 @@ from api.agents.retrieval_generation import rag_pipeline
 import os
 import asyncio
 import time
+import datetime
 
 from qdrant_client import QdrantClient
 
@@ -317,7 +318,7 @@ results = ls_client.evaluate(
         ragas_context_precision_id_based,
         ragas_context_recall_id_based
     ],
-    experiment_prefix="retriever-eval-v2",
+    experiment_prefix=f"retriever-eval_{datetime.datetime.now().strftime('%Y-%m-%d_%H-%M-%S')}",
     
     # --- OLD CODE (Removed because Groq handles parallel requests easily, unlike Gemini Free Tier) ---
     # max_concurrency=1, # FORCE LangSmith to process only 1 row at a time to prevent rate limits
