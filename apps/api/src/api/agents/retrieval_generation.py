@@ -169,6 +169,20 @@ Question:
 #     return response.content
 # -------------------------------------
 
+# --- OLD CODE (Hit Google 503 Server Error due to high traffic; switched to local Qwen) ---
+# @traceable(name="generate_answer",run_type="llm",metadata={"ls_provider": "google", "ls_model_name": "gemini-3.8-flash"})
+# def generate_answer(prompt, model_name="gemini-3.8-flash"):
+#     """
+#     Generates a response using the specified Gemini model.
+#     """
+#     response = gemini_client.models.generate_content(
+#         model=model_name,
+#         contents=prompt
+#     )
+#     
+#     return response.text
+# -----------------------------------------------------------------------------------------
+
 @traceable(name="generate_answer",run_type="llm",metadata={"ls_provider": "ollama", "ls_model_name": "qwen3.6:27b"})
 def generate_answer(prompt, model_name="qwen3.6:27b"):
     """
