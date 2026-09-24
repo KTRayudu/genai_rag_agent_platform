@@ -169,17 +169,15 @@ Question:
 #     return response.content
 # -------------------------------------
 
-@traceable(name="generate_answer",run_type="llm",metadata={"ls_provider": "google", "ls_model_name": "gemini-3.8-flash"})
-def generate_answer(prompt, model_name="gemini-3.8-flash"):
+@traceable(name="generate_answer",run_type="llm",metadata={"ls_provider": "ollama", "ls_model_name": "qwen3.6:27b"})
+def generate_answer(prompt, model_name="qwen3.6:27b"):
     """
-    Generates a response using the specified Gemini model.
+    Generates a response using the local Ollama Qwen model.
     """
-    response = gemini_client.models.generate_content(
-        model=model_name,
-        contents=prompt
-    )
+    llm = ChatOllama(model=model_name)
+    response = llm.invoke(prompt)
     
-    return response.text
+    return response.content
 
 
 
