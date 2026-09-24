@@ -183,10 +183,10 @@ Question:
 #     return response.text
 # -----------------------------------------------------------------------------------------
 
-@traceable(name="generate_answer",run_type="llm",metadata={"ls_provider": "ollama", "ls_model_name": "qwen3.6:27b"})
-def generate_answer(prompt, model_name="qwen3.6:27b"):
+@traceable(name="generate_answer",run_type="llm",metadata={"ls_provider": "ollama", "ls_model_name": "llama3.3:70b"})
+def generate_answer(prompt, model_name="llama3.3:70b"):
     """
-    Generates a response using the local Ollama Qwen model.
+    Generates a response using the local Ollama model.
     """
     llm = ChatOllama(model=model_name)
     response = llm.invoke(prompt)

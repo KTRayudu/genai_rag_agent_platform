@@ -91,7 +91,7 @@ SAFE_CONFIG = RunConfig(max_workers=1, max_retries=10, max_wait=60)
 # --------------------------------------
 
 ragas_llm = LangchainLLMWrapper(
-    ChatOllama(model="llama3.3:70b")
+    ChatOllama(model="gpt-oss:120b")
 )
 # --- OLD CODE (Caused 404 error: embedding-001 is deprecated/removed) ---
 # ragas_embeddings = LangchainEmbeddingsWrapper(
