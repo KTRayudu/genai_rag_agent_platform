@@ -5,6 +5,9 @@ services:
       dockerfile: apps/chatbot_ui/Dockerfile # The dockerfile is the file that contains the instructions for building the Docker image. In this case the dockerfile is the Dockerfile in the root directory of the project.
     ports:
       - "8501:8501"
+    dns:
+      - 8.8.8.8
+      - 1.1.1.1
     env_file:
       - .env # The env_file is the file that contains the environment variables. In this case the env_file is the .env file in the root directory of the project.
     restart: unless-stopped # The restart policy is used to restart the container if it crashes. In this case the container will restart if it crashes.
@@ -17,6 +20,9 @@ services:
       dockerfile: apps/api/Dockerfile
     ports:
       - "8000:8000"
+    dns:
+      - 8.8.8.8
+      - 1.1.1.1
     env_file:
       - .env
     restart: unless-stopped

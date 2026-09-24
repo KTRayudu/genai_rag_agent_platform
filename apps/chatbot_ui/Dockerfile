@@ -40,4 +40,5 @@ USER app
 
 WORKDIR /app/apps/chatbot_ui/src
 
-CMD ["uv", "run", "streamlit", "run", "chatbot_ui/app.py", "--server.address=0.0.0.0"]
+# CMD ["uv", "run", "streamlit", "run", "chatbot_ui/app.py", "--server.address=0.0.0.0"]
+CMD ["/app/.venv/bin/streamlit", "run", "chatbot_ui/app.py", "--server.address=0.0.0.0"]

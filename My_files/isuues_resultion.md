@@ -3081,3 +3081,141 @@ To rectify this, we removed the unsafe attribute access block completely.
 **Note on Telemetry:** LangSmith will still automatically trace the duration, latency, and success/failure of the embedding call because we retained the `@traceable` decorator with the `run_type="embedding"` configuration.
 
 The pipeline is now stabilized and the `get_embedding` function returns the vectors cleanly, allowing the semantic search against Qdrant to proceed.
+
+
+
+## ISSUE 4: Docker Container DNS Resolution Failure & PyPI Connection Error (`https://pypi.org/simple/`)
+
+### **Error Logs:**
+```text
+api-1 exited with code 2 (restarting)
+streamlit-app-1  | error: Request failed after 3 retries
+streamlit-app-1  |   Caused by: Failed to fetch: `https://pypi.org/simple/groq/`
+streamlit-app-1  |   Caused by: error sending request for url (https://pypi.org/simple/groq/)
+streamlit-app-1  |   Caused by: client error (Connect)
+streamlit-app-1  |   Caused by: dns error
+streamlit-app-1  |   Caused by: failed to lookup address information: Try again
+streamlit-app-1 exited with code 2 (restarting)
+api-1            | error: Request failed after 3 retries
+api-1            |   Caused by: Failed to fetch: `https://pypi.org/simple/ragas/`
+api-1            |   Caused by: error sending request for url (https://pypi.org/simple/ragas/)
+api-1            |   Caused by: client error (Connect)
+api-1            |   Caused by: dns error
+api-1            |   Caused by: failed to lookup address information: Try again
+api-1 exited with code 2 (restarting)
+streamlit-app-1  | error: Request failed after 3 retries
+streamlit-app-1  |   Caused by: Failed to fetch: `https://pypi.org/simple/matplotlib/`
+streamlit-app-1  |   Caused by: error sending request for url (https://pypi.org/simple/matplotlib/)
+streamlit-app-1  |   Caused by: client error (Connect)
+streamlit-app-1  |   Caused by: dns error
+streamlit-app-1  |   Caused by: failed to lookup address information: Try again
+streamlit-app-1 exited with code 2 (restarting)
+api-1            | error: Request failed after 3 retries
+api-1            |   Caused by: Failed to fetch: `https://pypi.org/simple/ipykernel/`
+api-1            |   Caused by: error sending request for url (https://pypi.org/simple/ipykernel/)
+api-1            |   Caused by: client error (Connect)
+api-1            |   Caused by: dns error
+api-1            |   Caused by: failed to lookup address information: Try again
+api-1 exited with code 2 (restarting)
+```
+
+### **Have you got this issue previously?**
+**No.** Previous issues logged in `isuues_resultion.md` (Issues 1–3) were application-level code and SDK errors. This is a **new container network/infrastructure issue**.
+
+### **Why It Occurred:**
+1. Containers ran `CMD ["uv", "run", "uvicorn", ...]` and `CMD ["uv", "run", "streamlit", ...]`.
+2. On startup, `uv run` attempts to contact PyPI (`https://pypi.org/simple/`) to verify package index metadata.
+3. Docker's internal DNS resolver (`127.0.0.11`) failed to forward queries to host DNS forwarders due to network interface changes (e.g. Wi-Fi reconnect, VPN, or system sleep/reboot).
+4. `uv` failed after 3 retries and exited with code 2, causing an infinite restart loop (`exited with code 2 (restarting)`).
+
+---
+
+## ISSUE 5: `uv run` Offline Dependency Solver Failure (`markers: python_full_version >= '3.14'`)
+
+### **Error Logs:**
+```text
+api-1  |       project's supported Python versions using `requires-python`.
+api-1  | 
+api-1  |       hint: Packages were unavailable because the network was disabled. When
+api-1  |       the network is disabled, registry packages may only be read from the
+api-1  |       cache.
+api-1  |   × No solution found when resolving dependencies for split (markers:
+api-1  |   │ python_full_version >= '3.14'):
+api-1  |   ╰─▶ Because fastapi was not found in the cache and api depends on
+api-1  |       fastapi>=0.128.0, we can conclude that api's requirements are
+api-1  |       unsatisfiable.
+api-1  |       And because your workspace requires api, we can conclude that your
+api-1  |       workspace's requirements are unsatisfiable.
+api-1  | 
+api-1  |       hint: While the active Python version is 3.12, the resolution failed for
+api-1  |       other Python versions supported by your project. Consider limiting your
+api-1  |       project's supported Python versions using `requires-python`.
+api-1  | 
+api-1  |       hint: Packages were unavailable because the network was disabled. When
+api-1  |       the network is disabled, registry packages may only be read from the
+api-1  |       cache.
+streamlit-app-1  |       project's supported Python versions using `requires-python`.
+streamlit-app-1  | 
+streamlit-app-1  |       hint: Packages were unavailable because the network was disabled. When
+streamlit-app-1  |       the network is disabled, registry packages may only be read from the
+streamlit-app-1  |       cache.
+streamlit-app-1  |   × No solution found when resolving dependencies for split (markers:
+streamlit-app-1  |   │ python_full_version >= '3.14'):
+streamlit-app-1  |   ╰─▶ Because pydantic was not found in the cache and chatbot-ui depends on
+streamlit-app-1  |       pydantic>=2.12.5, we can conclude that chatbot-ui's requirements are
+streamlit-app-1  |       unsatisfiable.
+streamlit-app-1  |       And because your workspace requires chatbot-ui, we can conclude that
+streamlit-app-1  |       your workspace's requirements are unsatisfiable.
+streamlit-app-1  | 
+streamlit-app-1  |       hint: While the active Python version is 3.12, the resolution failed for
+streamlit-app-1  |       other Python versions supported by your project. Consider limiting your
+streamlit-app-1  |       project's supported Python versions using `requires-python`.
+streamlit-app-1  | 
+streamlit-app-1  |       hint: Packages were unavailable because the network was disabled. When
+streamlit-app-1  |       the network is disabled, registry packages may only be read from the
+streamlit-app-1  |       cache.
+```
+
+### **Why It Occurred:**
+1. When `UV_OFFLINE=true` was set in attempt to bypass PyPI network calls, `uv run` attempted an offline dependency resolution across all Python versions matching `requires-python = ">=3.12"`.
+2. Because packages and markers for future Python versions (such as Python 3.14) were not pre-cached locally, `uv`'s dependency solver threw `No solution found`.
+
+---
+
+### **Root Cause & Permanent Fix Applied:**
+
+- **Root Cause:** Calling `uv run` inside Docker container `CMD` was unnecessary because all dependencies were **already installed** during `docker build` (`RUN uv sync --frozen`) into `/app/.venv`. Calling `uv run` forced runtime network checks to `pypi.org`, which failed due to host DNS lookup issues.
+- **Applied Fixes:**
+  1. Updated [`apps/api/Dockerfile`](file:///home/rayudu/otherwork_assignment_all_jobs/Todo/genai_rag_agent_platform/apps/api/Dockerfile):
+     ```dockerfile
+     CMD ["uvicorn", "api.app:app", "--host", "0.0.0.0", "--port", "8000", "--reload"]
+     ```
+  2. Updated [`apps/chatbot_ui/Dockerfile`](file:///home/rayudu/otherwork_assignment_all_jobs/Todo/genai_rag_agent_platform/apps/chatbot_ui/Dockerfile):
+     ```dockerfile
+     CMD ["streamlit", "run", "chatbot_ui/app.py", "--server.address=0.0.0.0"]
+     ```
+  3. Added DNS fallback servers (`8.8.8.8` & `1.1.1.1`) to [`docker-compose.yml`](file:///home/rayudu/otherwork_assignment_all_jobs/Todo/genai_rag_agent_platform/docker-compose.yml) so runtime calls to Gemini API, Groq, and LangSmith succeed seamlessly without DNS timeouts.
+
+
+
+## ISSUE 6: Container Startup Failure — Port 8501 Already Allocated (`Bind for 0.0.0.0:8501 failed`)
+
+### **Error Log:**
+```text
+Error response from daemon: failed to set up container networking: driver failed programming external connectivity on endpoint genai_rag_agent_platform-streamlit-app-1 (...): Bind for 0.0.0.0:8501 failed: port is already allocated
+```
+
+### **Why It Occurred:**
+- The Docker image build succeeded cleanly for both `api` and `streamlit-app` (confirming `uv` DNS crash loops were resolved).
+- However, when starting `streamlit-app-1`, Docker Compose tried to bind host port `8501:8501`.
+- Host port `8501` was already occupied by an orphaned container or background Streamlit process from a prior run.
+
+### **The Resolution:**
+1. Cleaned up orphaned containers and released port 8501:
+   ```bash
+   docker stop $(docker ps -q) 2>/dev/null
+   docker compose down --remove-orphans
+   sudo fuser -k 8501/tcp 2>/dev/null || true
+   ```
+2. Reran `docker compose up -d` to bring up `streamlit-app`, `api`, and `qdrant` successfully.
+

@@ -8,6 +8,8 @@ from google.genai import types
 from dotenv import load_dotenv
 import os
 from langsmith import traceable, get_current_run_tree
+from langchain_groq import ChatGroq
+from langchain_ollama import ChatOllama
 
 
 
@@ -135,18 +137,50 @@ Question:
 # "gemini-1.5-pro"          : Deep context understanding and complex multi-step reasoning.
 # -----------------------------------------------------------
 
-@traceable(name="generate_answer",run_type="llm",metadata={"ls_provider": "google", "ls_model_name": "gemini-2.5-flash"})
-def generate_answer(prompt, model_name="gemini-2.5-flash"):
+# --- OLD CODE (Hit Gemini 20 requests/day quota limit) ---
+# @traceable(name="generate_answer",run_type="llm",metadata={"ls_provider": "google", "ls_model_name": "gemini-3.6-flash"})
+# def generate_answer(prompt, model_name="gemini-3.6-flash"):
+#     """
+#     Generates a response using the specified Gemini model.
+#     """
+#     response = gemini_client.models.generate_content(
+#         model=model_name,
+#         contents=prompt,
+#         # You can add config here if you need system instructions or temperature control
+#     )
+#     
+#     return response.text
+# ---------------------------------------------------------
+
+# --- OLD CODE (Hit Groq 200,000 TPD limit for gpt-oss-20b) ---
+# @traceable(name="generate_answer",run_type="llm",metadata={"ls_provider": "groq", "ls_model_name": "openai/gpt-oss-20b"})
+# def generate_answer(prompt, model_name="openai/gpt-oss-20b"):
+# -------------------------------------------------------------
+
+# --- OLD CODE (Hit Groq 120b limit) ---
+# @traceable(name="generate_answer",run_type="llm",metadata={"ls_provider": "groq", "ls_model_name": "openai/gpt-oss-120b"})
+# def generate_answer(prompt, model_name="openai/gpt-oss-120b"):
+#     """
+#     Generates a response using the specified Groq model.
+#     """
+#     llm = ChatGroq(model=model_name)
+#     response = llm.invoke(prompt)
+#     
+#     return response.content
+# -------------------------------------
+
+@traceable(name="generate_answer",run_type="llm",metadata={"ls_provider": "google", "ls_model_name": "gemini-2.0-flash"})
+def generate_answer(prompt, model_name="gemini-2.0-flash"):
     """
     Generates a response using the specified Gemini model.
     """
     response = gemini_client.models.generate_content(
         model=model_name,
-        contents=prompt,
-        # You can add config here if you need system instructions or temperature control
+        contents=prompt
     )
     
     return response.text
+
 
 
 
@@ -156,7 +190,12 @@ def generate_answer(prompt, model_name="gemini-2.5-flash"):
 @traceable ( name="rag_pipeline")
 def rag_pipeline(question, top_k=5):
     # Added: check_compatibility=False to fix version conflict
-    qdrant_client = QdrantClient(url="http://qdrant:6333", check_compatibility=False)
+    # --- OLD CODE (Hardcoded URL caused DNS failure when running evaluations locally outside Docker) ---
+    # qdrant_client = QdrantClient(url="http://qdrant:6333", check_compatibility=False)
+    # -------------------------------------------------------------------------------------------------
+    # Use environment variable so it works both in Docker (http://qdrant:6333) and locally (http://localhost:6333)
+    qdrant_url = os.getenv("QDRANT_URL", "http://qdrant:6333")
+    qdrant_client = QdrantClient(url=qdrant_url, check_compatibility=False)
 
     retrieved_context = retrieve_data(question, qdrant_client, top_k)
     preprocessed_context = process_context(retrieved_context)
