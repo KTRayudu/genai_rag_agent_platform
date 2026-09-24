@@ -7,7 +7,7 @@ The pipeline has been migrated away from cloud APIs (Groq/Gemini) and now runs e
 To avoid rate limits and costs, the entire evaluation and generation pipeline is powered by your local hardware:
 * **Vector Embeddings (Qdrant Database):** `gemini-embedding-001`
 * **Dataset Generation (Synthetic Q&A):** Local Ollama (`gpt-oss:120b`)
-* **Application RAG Answer Generation:** Google Gemini (`gemini-2.0-flash`)
+* **Application RAG Answer Generation:** Google Gemini (`gemini-3.8-flash`)
 * **Ragas Evaluator / Judge:** Local Ollama (`llama3.3:70b`)
 
 ---

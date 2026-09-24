@@ -169,8 +169,8 @@ Question:
 #     return response.content
 # -------------------------------------
 
-@traceable(name="generate_answer",run_type="llm",metadata={"ls_provider": "google", "ls_model_name": "gemini-2.0-flash"})
-def generate_answer(prompt, model_name="gemini-2.0-flash"):
+@traceable(name="generate_answer",run_type="llm",metadata={"ls_provider": "google", "ls_model_name": "gemini-3.8-flash"})
+def generate_answer(prompt, model_name="gemini-3.8-flash"):
     """
     Generates a response using the specified Gemini model.
     """
