@@ -310,14 +310,14 @@ def rate_limited_rag_pipeline(question):
 # NEW CODE: Wrapped rag_pipeline in rate_limited_rag_pipeline to guarantee a 15s delay between target function evaluations
 results = ls_client.evaluate(
     lambda x: rate_limited_rag_pipeline(x["question"]),
-    data="rag-evaluation-dataset",
+    data="ollama-70b-amazon-dataset",
     evaluators=[
         ragas_faithfulness,
         ragas_responce_relevancy,
         ragas_context_precision_id_based,
         ragas_context_recall_id_based
     ],
-    experiment_prefix="retriever1",
+    experiment_prefix="retriever-eval-v2",
     
     # --- OLD CODE (Removed because Groq handles parallel requests easily, unlike Gemini Free Tier) ---
     # max_concurrency=1, # FORCE LangSmith to process only 1 row at a time to prevent rate limits

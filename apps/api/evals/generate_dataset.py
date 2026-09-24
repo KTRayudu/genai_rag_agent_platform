@@ -113,6 +113,13 @@ response = llm.invoke(messages)
 # 5. Parse the LLM's response
 try:
     json_data = json.loads(response.content)
+    # FIX: If the model returns {"type": "array", "items": [...]}, extract the array
+    if isinstance(json_data, dict) and "items" in json_data:
+        json_data = json_data["items"]
+    elif isinstance(json_data, dict) and len(json_data) == 1:
+        # Fallback if it wrapped it in another random key
+        json_data = list(json_data.values())[0]
+        
     print(f"Successfully generated {len(json_data)} new Q&A pairs!")
 except Exception as e:
     print("Failed to parse JSON from the model!")
