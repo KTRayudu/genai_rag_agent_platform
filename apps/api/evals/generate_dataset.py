@@ -61,7 +61,7 @@ Construct 5 questions that can't be answered with the available chunks.
         "type": "array",
         "items": {
           "type": "string",
-          "description": "ID of the chunk that could be used to answer the question."
+          "description": "CRITICAL: You MUST include the exact 'id' (parent_asin) of the chunks you used here. Do not leave this array empty."
         }
       },
       "answer_example": {
