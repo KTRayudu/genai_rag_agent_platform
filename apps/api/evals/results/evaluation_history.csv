@@ -1,0 +1,2 @@
+Timestamp,App Model,Project Name,ragas_responce_relevancy,ragas_faithfulness,ragas_context_precision_id_based,ragas_context_recall_id_based
+retriever-eval-v2-2a6db604,llama3.3-70b,retriever-eval-v2-2a6db604,0.8615,0.7474,0.24,0.9467
